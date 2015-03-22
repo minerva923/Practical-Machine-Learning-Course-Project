@@ -1,0 +1,71 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Minerva923"
+output:
+  html_document:
+    keep_md: yes
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+##Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+##Data Processing
+After loading needed packages and data, I observe the dataset first. I then decide to remove all variables having missing values since they tend to account most of that variable. When done, the data are splited to training and testing sets, waiting for further modeling and prediction.
+```{r}
+## Load needed packages
+library(caret); library(parallel); library(doParallel)
+registerDoParallel(clust <- makeForkCluster(detectCores()))
+## Load training data
+data <- read.csv("./pml-training.csv", na.strings = c("NA", "#DIV/0!", ""),
+                 stringsAsFactors=FALSE)
+## Remove all variables having missing value via observation
+keep <- c("classe", "magnet_forearm_y", "magnet_forearm_z", "gyros_forearm_x",
+          "gyros_forearm_y", "gyros_forearm_z", "accel_forearm_x",
+          "accel_forearm_y", "accel_forearm_z", "magnet_forearm_x", 
+          "total_accel_forearm", "accel_dumbbell_z", "magnet_dumbbell_x",
+          "magnet_dumbbell_y", "magnet_dumbbell_z", "roll_forearm", 
+          "pitch_forearm", "yaw_forearm", "gyros_dumbbell_x", "gyros_dumbbell_y",
+          "gyros_dumbbell_z", "accel_dumbbell_x", "accel_dumbbell_y",
+          "total_accel_dumbbell", "pitch_dumbbell", "yaw_dumbbell", "roll_dumbbell",
+          "accel_arm_y", "accel_arm_z", "magnet_arm_x", "magnet_arm_y",
+          "magnet_arm_z", "gyros_arm_x", "gyros_arm_y", "gyros_arm_z",
+          "accel_arm_x", "magnet_belt_x", "magnet_belt_y", "magnet_belt_z", 
+          "roll_arm", "pitch_arm", "yaw_arm", "total_accel_arm", "gyros_belt_x",
+          "gyros_belt_y", "gyros_belt_z", "accel_belt_x", "accel_belt_y",
+          "accel_belt_z", "roll_belt", "pitch_belt", "yaw_belt", "total_accel_belt")
+data <- data[, keep]
+
+set.seed(1234)
+inTrain <- createDataPartition(y=data$classe, p=0.75, list=FALSE)
+training <- data[inTrain,]
+testing <- data[-inTrain,]
+```
+
+##Modeling
+In the model, Random Forest algorithm is used, while the number of cross-validation is set 5 and pca is choosen to do the preprocess. In addition, I control the number of trees to be 50 through train command in order to reduce the computing time.
+```{r}
+fitControl <- trainControl(method = "cv", number = 5, allowParallel = TRUE)
+modelFit <- train(factor(classe)~., data=training, method="rf", preProcess="pca",
+                  trControl = fitControl, ntrees=50)
+## Turn off the paraell computing
+stopCluster(clust)
+```
+
+##Prediction
+```{r}
+varImp(modelFit)
+prediction <- predict(modelFit, newdata = testing)
+print(cm <- confusionMatrix(prediction, testing$classe))
+```
+Observing the result of variable importance, value of the first 7 variables are all larger than 60%. In the confusion matrix, we can see the accuracy, which in this case is 0.978, while Kappa value is 0.97. The result is satisfied.
+
+The estimated out-of-sample error is 1 - the model accuracy
+```{r}
+ose <- 1 - cm$overall[1]
+names(ose) <- "Out of Sample Error"
+ose
+```
+
+
